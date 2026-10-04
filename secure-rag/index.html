@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="en">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<title>Enforcing Document-Level Access Control in a RAG Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f4ef;
+    --surface: #ffffff;
+    --surface-2: #f0efea;
+    --border: #e2e1dc;
+    --border-subtle: #eceae4;
+    --text-primary: #1a1a18;
+    --text-secondary: #6b6b68;
+    --accent-green: #059669;
+    --accent-green-bg: #f0fdf9;
+    --accent-green-border: #99f0d0;
+    --accent-orange: #d97706;
+    --accent-red-bg: #fff7f5;
+    --accent-red-border: #fca89a;
+    --accent-red: #dc2626;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --sidebar-width: 220px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Lora', Georgia, serif;
+    font-size: 15.5px;
+    line-height: 1.75;
+    color: var(--text-primary);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .layout {
+    display: flex;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    gap: 40px;
+    align-items: flex-start;
+  }
+
+  .content { flex: 1; min-width: 0; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    position: sticky;
+    top: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 16px;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+  }
+  .sidebar h3 {
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar a {
+    display: block;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 4px 0 4px 8px;
+    line-height: 1.5;
+    transition: color 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .sidebar a:hover { color: var(--accent-green); border-left-color: var(--accent-green); }
+  .sidebar a.indent { padding-left: 20px; font-size: 11px; opacity: 0.85; }
+  .sidebar a.indent:hover { opacity: 1; }
+  .sidebar .sidebar-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+  /* PAGE HEADER */
+  .page-header {
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-eyebrow {
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent-green);
+    margin-bottom: 6px;
+  }
+  .page-title {
+    font-family: 'Lora', serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+
+  /* TOPIC HEADING */
+  .page-header + .topic-heading { margin-top: 14px; }
+  .topic-heading {
+    font-family: 'Lora', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 36px 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  /* PROSE */
+  .prose p { margin: 0 0 14px 0; }
+  .prose p:last-child { margin-bottom: 0; }
+
+  /* CONCEPT BLOCK */
+  .concept {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 20px;
+    margin: 10px 0;
+  }
+  .concept-label {
+    font-family: 'Fira Code', monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+  .concept-title {
+    font-family: 'Lora', serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .concept ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .concept ul li {
+    padding: 2px 0 2px 16px;
+    position: relative;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+  .concept ul li::before {
+    content: '–';
+    position: absolute;
+    left: 0;
+    color: var(--accent-green);
+    font-weight: 600;
+  }
+  .concept-source {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .concept-source b { color: var(--accent-green); font-weight: 700; }
+
+  /* SPLIT ROW */
+  .split-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 14px 0;
+  }
+  .split-row > .concept { margin: 0; }
+
+  /* GREEN QA BLOCK */
+  .qa-block {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 20px;
+    margin: 14px 0;
+    font-size: 14.5px;
+  }
+  .question {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    font-size: 14.5px;
+  }
+  .question::before { content: "Q — "; color: var(--accent-green); font-weight: 700; }
+  .qa-block ul {
+    list-style: none;
+    padding: 0;
+    margin: 6px 0 0 0;
+  }
+  .qa-block ul li {
+    padding: 2px 0 2px 16px;
+    position: relative;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .qa-block ul li::before {
+    content: '–';
+    position: absolute;
+    left: 0;
+    color: var(--accent-green);
+    font-weight: 600;
+  }
+  .qa-block p.answer { margin-top: 8px; }
+
+  /* ORANGE CARD */
+  .orange-card {
+    background: #fdfcf7;
+    border: 1px solid #e8e4d4;
+    border-left: 3px solid #d97706;
+    border-radius: var(--radius-md);
+    padding: 14px 20px;
+    margin: 14px 0;
+    font-size: 14.5px;
+  }
+  .orange-card .card-eyebrow {
+    font-family: 'Fira Code', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: #92400e;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    margin-bottom: 4px;
+  }
+  .orange-card .card-title {
+    font-weight: 700;
+    color: #1a1a18;
+    font-size: 13.5px;
+    margin-bottom: 8px;
+  }
+  .orange-card p { margin: 0; }
+  .orange-card p + p { margin-top: 8px; }
+
+  /* BUG / DANGER CARD */
+  .bug-card {
+    background: var(--accent-red-bg);
+    border: 1px solid var(--accent-red-border);
+    border-left: 3px solid var(--accent-red);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 14.5px;
+    line-height: 1.72;
+  }
+  .bug-card .bug-title {
+    font-weight: 700;
+    color: var(--accent-red);
+    font-size: 11px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-family: 'Lora', serif;
+  }
+  .bug-card p { margin: 0; color: #450a0a; }
+  .bug-card code { background: #ffe4de; border-color: var(--accent-red-border); }
+
+  /* CALLOUT */
+  .callout {
+    background: var(--accent-green-bg);
+    border: 1px solid var(--accent-green-border);
+    border-left: 3px solid var(--accent-green);
+    border-radius: var(--radius-md);
+    padding: 12px 18px;
+    margin: 14px 0;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #064e3b;
+  }
+
+  /* DIAGRAM CARD */
+  .diagram-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 24px 18px;
+    margin: 18px 0;
+  }
+  .diagram-eyebrow {
+    font-family: 'Fira Code', monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .meme-row {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin: 48px 0 0 0;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+  }
+  .meme-card {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    text-align: center;
+  }
+  .meme-card img {
+    display: block;
+    max-width: 300px;
+    width: 100%;
+    margin: 0 auto;
+    border-radius: var(--radius-sm);
+    mix-blend-mode: multiply;
+  }
+  .meme-card figcaption {
+    margin-top: 10px;
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+  }
+  .diagram-card .diagram-scroll { overflow-x: auto; }
+  .diagram-card svg { display: block; width: 100%; height: auto; min-width: 300px; }
+  .diagram-card figcaption {
+    margin-top: 4px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  /* FLOW CHIP (short recap chains) */
+  .flow-chip {
+    font-family: 'Fira Code', monospace;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    line-height: 2;
+    word-spacing: 1px;
+  }
+  .flow-arrow { color: var(--accent-green); font-weight: 600; margin: 0 4px; }
+
+  /* TERM PILL (highlighted flow-chip keywords) */
+  .term {
+    font-family: 'Fira Code', monospace;
+    font-size: 11.5px;
+    font-weight: 700;
+    background: var(--accent-green-bg);
+    color: var(--accent-green);
+    border: 1px solid var(--accent-green-border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .term.muted {
+    background: var(--surface-2);
+    color: var(--text-secondary);
+    border-color: var(--border);
+  }
+  .flow-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 2px; }
+
+  /* PLAIN LISTS INSIDE PROSE */
+  .prose ul { margin: 8px 0 14px 0; padding-left: 20px; }
+  .prose ul li { margin-bottom: 6px; line-height: 1.65; }
+  .prose ul li:last-child { margin-bottom: 0; }
+
+  /* DATA TABLE */
+  .data-table-wrap { overflow-x: auto; margin: 14px 0 18px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--surface); }
+  table.data-table th, table.data-table td { padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--border-subtle); }
+  table.data-table th {
+    font-family: 'Fira Code', monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-secondary);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  table.data-table td { font-family: 'Fira Code', monospace; font-size: 12.5px; }
+  table.data-table tr:last-child td { border-bottom: none; }
+  table.data-table td.center, table.data-table th.center { text-align: center; }
+
+  /* CODE BLOCK */
+  pre.code-block {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    margin: 14px 0;
+    overflow-x: auto;
+    font-family: 'Fira Code', monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+
+  b, strong { font-weight: 600; }
+  code {
+    font-family: 'Fira Code', monospace;
+    font-size: 12.5px;
+    background: #eef0f3;
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  a { color: var(--accent-green); }
+
+  @media (max-width: 768px) {
+    .layout { flex-direction: column-reverse; padding: 20px 16px 60px; }
+    .sidebar { width: 100%; position: static; }
+    .content { width: 100%; }
+    .split-row { grid-template-columns: 1fr; }
+  }
+</style>
+<div class="layout">
+<div class="content">
+
+  <!-- HEADER -->
+  <div class="page-header">
+    <div class="page-eyebrow">Engineering Case Study · Access-Controlled RAG</div>
+    <div class="page-title">Enforcing Document-Level Access Control in a RAG Pipeline</div>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 1 — INTRODUCTION
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="intro">Part 1: Introduction — What problem was I trying to solve?</h2>
+
+  <div class="prose">
+    <p>Most RAG demos assume that if a document is in the knowledge base, every user can retrieve it. That's not true for many real-world applications.</p>
+    <p>Imagine an organization with <b>HR</b> and <b>Finance</b> documents. <b>Alice</b> works in <b>HR</b>, while <b>Bob</b> works in <b>Finance</b>. <b>Alice</b> should be able to ask questions about <b>HR</b> policies, but she should never receive information from <b>Finance</b> documents.</p>
+    <p>I wanted to build a RAG system where <b>document-level authorization is enforced before the retrieved content reaches the LLM</b>.</p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 2 — TECH STACK
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="tech-stack">Part 2: Tech Stack</h2>
+
+  <div class="prose">
+    <p>I built the system using the following technologies:</p>
+  </div>
+
+  <div class="data-table-wrap">
+    <table class="data-table"><tbody>
+      <tr><th>Component</th><th>Technology</th><th>Purpose</th></tr>
+      <tr><td>Identity &amp; Authentication</td><td>Microsoft Entra ID</td><td>Authenticate users and provide group membership</td></tr>
+      <tr><td>Backend API</td><td>FastAPI</td><td>Handle authentication, authorization, retrieval, and LLM requests</td></tr>
+      <tr><td>Document Storage</td><td>Azure Blob Storage</td><td>Store source documents</td></tr>
+      <tr><td>Search &amp; Retrieval</td><td>Azure AI Search</td><td>Chunk storage, vector/keyword retrieval, and access filtering</td></tr>
+      <tr><td>LLM</td><td>Azure OpenAI — GPT-5-nano</td><td>Generate grounded answers from authorized context</td></tr>
+      <tr><td>Document Processing</td><td>Azure AI Search Indexer + Skillset</td><td>Extract, process, and chunk documents</td></tr>
+      <tr><td>Authentication Flow</td><td>OAuth 2.0 / OpenID Connect</td><td>Handle the user login flow</td></tr>
+      <tr><td>Language</td><td>Python</td><td>Backend and RAG implementation</td></tr>
+    </tbody></table>
+  </div>
+
+  <div class="prose">
+    <p>The high-level flow between these components is:</p>
+  </div>
+
+  <div class="flow-chip"><span class="term">User</span> <span class="flow-arrow">→</span> <span class="term">Microsoft Entra ID</span> <span class="flow-arrow">→</span> <span class="term">FastAPI</span> <span class="flow-arrow">→</span> <span class="term">Azure AI Search</span> <span class="flow-arrow">→</span> <span class="term">Azure OpenAI</span> <span class="flow-arrow">→</span> <span class="term">Answer</span></div>
+
+  <!-- ══════════════════════════
+       PART 3 — CORE IDEA
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="core-idea">Part 3: The Core Idea — Authorization Before Generation</h2>
+
+  <div class="prose">
+    <p>How do you stop the LLM from seeing unauthorized documents? 🤔</p>
+    <p><b>Enforce authorization before retrieval results reach the LLM.</b> 🔥</p>
+    <p>One approach is to retrieve everything and tell the LLM not to reveal what the user isn't allowed to see. I didn't rely on that. Once unauthorized content enters the LLM's context, the model has already seen it. <b>A prompt instruction is not an authorization boundary.</b></p>
+    <p>Authorization has to happen at the retrieval layer, and it's a separate question from relevance:</p>
+    <ul>
+      <li><b>Authorization</b>: Is Alice allowed to access this document?</li>
+      <li><b>Relevance</b>: Is this document useful for answering her question?</li>
+    </ul>
+    <p>Alice's identity and group membership determine authorization. Azure AI Search determines relevance.</p>
+  </div>
+
+  <figure class="diagram-card compact">
+    <div class="diagram-scroll">
+    <svg viewBox="0 0 610 300" role="img" aria-label="Authorization asks whether Alice is allowed to access the document, sourced from her identity. Relevance asks whether the document matches her question, sourced from the search system. Both must be true for the chunk to reach Alice.">
+      <defs>
+        <marker id="arrow-d0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--text-secondary)"/>
+        </marker>
+      </defs>
+
+      <line x1="170" y1="128" x2="292" y2="176" style="stroke:var(--accent-green);stroke-width:1.4"/>
+      <line x1="440" y1="128" x2="318" y2="176" style="stroke:var(--text-secondary);stroke-width:1.4"/>
+      <line x1="305" y1="203" x2="305" y2="222" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d0)"/>
+
+      <rect x="50" y="20" width="240" height="44" rx="10" style="fill:var(--accent-green-bg);stroke:var(--accent-green-border);stroke-width:1.5"/>
+      <text x="170" y="42" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.6px;font-weight:600;fill:var(--accent-green)">Authorization</text>
+
+      <text x="170" y="84" text-anchor="middle" style="font-family:'Lora',serif;font-size:10.2px;fill:var(--text-primary)">Is Alice allowed to</text>
+      <text x="170" y="101" text-anchor="middle" style="font-family:'Lora',serif;font-size:10.2px;fill:var(--text-primary)">access this document?</text>
+      <text x="170" y="123" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:8.9px;fill:var(--accent-green)">→ Alice's identity</text>
+
+      <rect x="330" y="20" width="220" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="440" y="42" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.6px;font-weight:600;fill:var(--text-primary)">Relevance</text>
+
+      <text x="440" y="84" text-anchor="middle" style="font-family:'Lora',serif;font-size:10.2px;fill:var(--text-primary)">Is this document relevant</text>
+      <text x="440" y="101" text-anchor="middle" style="font-family:'Lora',serif;font-size:10.2px;fill:var(--text-primary)">to her question?</text>
+      <text x="440" y="123" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:8.9px;fill:var(--text-secondary)">→ the search system</text>
+
+      <circle cx="305" cy="188" r="18" style="fill:var(--surface);stroke:var(--text-secondary);stroke-width:1.5"/>
+      <text x="305" y="189" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:8.9px;font-weight:600;fill:var(--text-secondary)">AND</text>
+
+      <rect x="165" y="224" width="280" height="48" rx="10" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="305" y="248" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--accent-green)">Authorized &amp; relevant chunk</text>
+    </svg>
+    </div>
+    <div class="diagram-eyebrow">Fig. 1 · Two independent questions, one outcome</div>
+    <figcaption>Authorization and relevance are evaluated independently. A chunk only reaches Alice when both come back true — neither one alone is enough.</figcaption>
+    </figure>
+
+  <figure class="diagram-card" id="access-filter">
+    <div class="diagram-scroll">
+    <svg viewBox="0 0 890 100" role="img" aria-label="Alice flows through Microsoft Entra ID to an HR group ID, which Azure AI Search turns into the filter access eq HR_GROUP_ID.">
+      <defs>
+        <marker id="arrow-d1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--text-secondary)"/>
+        </marker>
+      </defs>
+      <line x1="80" y1="50" x2="116" y2="50" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d1)"/>
+      <line x1="280" y1="50" x2="316" y2="50" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d1)"/>
+      <line x1="430" y1="50" x2="466" y2="50" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d1)"/>
+      <line x1="610" y1="50" x2="646" y2="50" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d1)"/>
+
+      <rect x="10" y="28" width="70" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="45" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Alice</text>
+
+      <rect x="120" y="28" width="160" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="200" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Microsoft Entra ID</text>
+
+      <rect x="320" y="28" width="110" height="44" rx="10" style="fill:var(--accent-green-bg);stroke:var(--accent-green-border);stroke-width:1.5"/>
+      <text x="375" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--accent-green)">HR group ID</text>
+
+      <rect x="470" y="28" width="140" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="540" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Azure AI Search</text>
+
+      <rect x="650" y="20" width="230" height="60" rx="10" style="fill:var(--accent-green-bg);stroke:var(--accent-green-border);stroke-width:1.5"/>
+      <text x="765" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.3px;fill:var(--accent-green)">access eq '&lt;HR_GROUP_ID&gt;'</text>
+    </svg>
+    </div>
+    <div class="diagram-eyebrow">Fig. 2 · Resolving Alice's group into a search filter</div>
+    <figcaption>If Alice belongs only to HR, Finance chunks are filtered out during retrieval — not retrieved and hidden. Never retrieved at all.</figcaption>
+    </figure>
+
+  <div class="callout">
+    <p><b>The LLM is responsible for generating the answer. It is not responsible for deciding what the user is allowed to see.</b></p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 4 — ARCHITECTURE
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="architecture">Part 4: Architecture — What I Built</h2>
+
+  <div class="prose">
+    <p>The system consists of several components working together:</p>
+  </div>
+
+  <div class="flow-chip"><span class="term">Alice</span> <span class="flow-arrow">→</span> <span class="term">Microsoft Entra ID</span> <span class="flow-arrow">→</span> <span class="term">Access Token</span> <span class="flow-arrow">→</span> <span class="term">FastAPI</span> <span class="flow-arrow">→</span> <span class="term">Identity + Groups</span> <span class="flow-arrow">→</span> <span class="term">Azure AI Search</span> <span class="flow-arrow">→</span> <span class="term">Authorized + Relevant Chunks</span> <span class="flow-arrow">→</span> <span class="term">Azure OpenAI</span> <span class="flow-arrow">→</span> <span class="term">RAG Answer</span></div>
+
+  <div class="prose">
+    <p style="margin-top:14px">I used <b>two separate Microsoft Entra application registrations</b> — one for the client app Alice interacts with, one for the backend API that handles authentication, authorization, search, and Azure OpenAI.</p>
+  </div>
+
+  <figure class="diagram-card" id="main-components">
+    <div class="diagram-scroll">
+    <svg viewBox="0 0 780 400" role="img" aria-label="Authenticate phase: Alice, Client App (app registration secure-rag-client) calling slash login, Microsoft Entra ID, Access Token returned to slash auth callback, FastAPI (app registration secure-rag-backend) exposing slash ask. Retrieve phase, filtered by access: Identity and Groups, Azure AI Search, Authorized and Relevant Chunks. Generate phase: Azure OpenAI, RAG Answer.">
+      <defs>
+        <marker id="arrow-d3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--text-secondary)"/>
+        </marker>
+      </defs>
+
+      <!-- phase bands -->
+      <rect x="20" y="28" width="740" height="94" rx="14" style="fill:var(--surface-2);stroke:var(--border);stroke-width:1" stroke-dasharray="3 4"/>
+      <text x="36" y="46" style="font-family:'Fira Code',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;fill:var(--text-secondary)">AUTHENTICATE</text>
+
+      <rect x="20" y="148" width="740" height="94" rx="14" style="fill:var(--accent-green-bg);stroke:var(--accent-green-border);stroke-width:1" stroke-dasharray="3 4"/>
+      <text x="36" y="166" style="font-family:'Fira Code',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;fill:var(--accent-green)">RETRIEVE — FILTERED BY ACCESS</text>
+
+      <rect x="20" y="266" width="740" height="88" rx="14" style="fill:var(--surface-2);stroke:var(--border);stroke-width:1" stroke-dasharray="3 4"/>
+      <text x="36" y="284" style="font-family:'Fira Code',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;fill:var(--text-secondary)">GENERATE</text>
+
+      <!-- in-row arrows, row 1 -->
+      <line x1="90" y1="82" x2="108" y2="82" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+      <line x1="250" y1="82" x2="268" y2="82" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+      <line x1="440" y1="82" x2="458" y2="82" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+      <line x1="580" y1="82" x2="598" y2="82" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+      <rect x="235" y="105" width="48" height="16" rx="8" style="fill:var(--text-primary)"/>
+      <text x="259" y="113.5" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:8.5px;font-weight:600;fill:var(--bg)">/login</text>
+
+      <rect x="403" y="105" width="92" height="16" rx="8" style="fill:var(--text-primary)"/>
+      <text x="449" y="113.5" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:8.5px;font-weight:600;fill:var(--bg)">/auth/callback</text>
+
+      <!-- in-row arrows, row 2 -->
+      <line x1="246" y1="198" x2="268" y2="198" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+      <line x1="415" y1="198" x2="437" y2="198" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+
+      <!-- in-row arrow, row 3 -->
+      <line x1="386" y1="314" x2="408" y2="314" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+
+      <!-- connectors between rows -->
+      <polyline points="670,104 670,140 171,140 171,176" style="fill:none;stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+      <rect x="651" y="105" width="38" height="16" rx="8" style="fill:var(--text-primary)"/>
+      <text x="670" y="113.5" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:8.5px;font-weight:600;fill:var(--bg)">/ask</text>
+      <polyline points="562,220 562,256 326,256 326,292" style="fill:none;stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d3)"/>
+
+      <!-- row 1: authenticate -->
+      <rect x="20" y="60" width="70" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="55" y="82" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--text-primary)">Alice</text>
+
+      <rect x="110" y="60" width="140" height="44" rx="10" style="fill:var(--surface);stroke:var(--accent-orange);stroke-width:1.5" stroke-dasharray="2 2"/>
+      <text x="180" y="76" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--accent-orange)">Client App</text>
+      <text x="180" y="90" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:7.5px;fill:var(--accent-orange)">secure-rag-client</text>
+
+      <rect x="270" y="60" width="170" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="355" y="82" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--text-primary)">Microsoft Entra ID</text>
+
+      <rect x="460" y="60" width="120" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="520" y="82" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--text-primary)">Access Token</text>
+
+      <rect x="600" y="60" width="140" height="44" rx="10" style="fill:var(--surface);stroke:var(--accent-orange);stroke-width:1.5" stroke-dasharray="2 2"/>
+      <text x="670" y="76" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--accent-orange)">FastAPI</text>
+      <text x="670" y="90" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:7.5px;fill:var(--accent-orange)">secure-rag-backend</text>
+
+      <!-- row 2: retrieve, filtered -->
+      <rect x="96" y="176" width="150" height="44" rx="10" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="171" y="198" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--accent-green)">Identity + Groups</text>
+
+      <rect x="270" y="176" width="145" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="342" y="198" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--text-primary)">Azure AI Search</text>
+
+      <rect x="439" y="176" width="245" height="44" rx="10" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="561" y="198" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.5px;fill:var(--accent-green)">Authorized + Relevant Chunks</text>
+
+      <!-- row 3: generate -->
+      <rect x="266" y="292" width="120" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="326" y="314" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--text-primary)">Azure OpenAI</text>
+
+      <rect x="410" y="292" width="105" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="462" y="314" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10px;fill:var(--text-primary)">RAG Answer</text>
+    </svg>
+    </div>
+    <div class="diagram-eyebrow">Fig. 3 · The request lifecycle, end to end</div>
+    <figcaption>The dashed orange boxes are the two Entra app registrations: <code>secure-rag-client</code>, which Alice signs into via <code>/login</code>, and <code>secure-rag-backend</code>, which <code>/auth/callback</code> hands the token to and which exposes <code>/ask</code> — validating the token, checking group membership, querying search, and calling Azure OpenAI. Everything from <code>secure-rag-backend</code> onward is the part gated by Alice's group.</figcaption>
+    </figure>
+
+  <figure class="diagram-card" id="two-apps">
+    <div class="diagram-scroll">
+    <svg viewBox="0 0 600 320" role="img" aria-label="Client App: Alice logs in through Microsoft Entra ID and receives an access token, which the Backend API uses to validate the token, get the user's groups, query Azure AI Search, and call Azure OpenAI.">
+      <defs>
+        <marker id="arrow-d4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--text-secondary)"/>
+        </marker>
+      </defs>
+
+      <line x1="140" y1="64" x2="140" y2="106" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d4)"/>
+      <text x="150" y="90" style="font-family:'Fira Code',monospace;font-size:8.5px;font-style:italic;fill:var(--text-secondary)">Alice logs in</text>
+
+      <line x1="140" y1="152" x2="140" y2="194" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d4)"/>
+      <text x="150" y="178" style="font-family:'Fira Code',monospace;font-size:8.5px;font-style:italic;fill:var(--text-secondary)">Access token</text>
+
+      <rect x="40" y="20" width="200" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="140" y="42" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Client App</text>
+
+      <rect x="40" y="108" width="200" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="140" y="130" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.8px;fill:var(--text-primary)">Microsoft Entra ID</text>
+
+      <rect x="40" y="196" width="200" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="140" y="218" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Backend API</text>
+
+      <circle cx="240" cy="218" r="3" style="fill:var(--text-secondary)"/>
+      <line x1="240" y1="218" x2="340" y2="120" style="stroke:var(--border);stroke-width:1.3"/>
+      <line x1="240" y1="218" x2="340" y2="172" style="stroke:var(--border);stroke-width:1.3"/>
+      <line x1="240" y1="218" x2="340" y2="224" style="stroke:var(--border);stroke-width:1.3"/>
+      <line x1="240" y1="218" x2="340" y2="276" style="stroke:var(--border);stroke-width:1.3"/>
+
+      <rect x="340" y="100" width="220" height="40" rx="9" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="450" y="120" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.8px;fill:var(--accent-green)">Validate token</text>
+
+      <rect x="340" y="152" width="220" height="40" rx="9" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="450" y="172" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.8px;fill:var(--accent-green)">Get user's groups</text>
+
+      <rect x="340" y="204" width="220" height="40" rx="9" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="450" y="224" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.8px;fill:var(--text-primary)">Query Azure AI Search</text>
+
+      <rect x="340" y="256" width="220" height="40" rx="9" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="450" y="276" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.8px;fill:var(--text-primary)">Call Azure OpenAI</text>
+    </svg>
+    </div>
+    <div class="diagram-eyebrow">Fig. 4 · Two app registrations, one backend doing the work</div>
+    <figcaption>The client app only ever sees a login screen. Every privileged step — token validation, group lookup, search, generation — happens inside the backend API.</figcaption>
+    </figure>
+
+  <div class="prose">
+    <p>Document ingestion is a separate pipeline:</p>
+  </div>
+
+  <div class="flow-chip"><span class="term">Azure Blob Storage</span> <span class="flow-arrow">→</span> <span class="term">Indexer</span> <span class="flow-arrow">→</span> <span class="term">Skillset</span> <span class="flow-arrow">→</span> <span class="term">Document chunks</span> <span class="flow-arrow">→</span> <span class="term">Azure AI Search</span></div>
+
+  <div class="prose">
+    <p style="margin-top:14px">That gives the system two independent sides that meet during retrieval — the document side tags chunks with an access group, the user side resolves a user to their groups. When Alice asks a question, they come together.</p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 5 — DOCUMENT PERMISSIONS
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="document-permissions">Part 5: Document Permissions — Giving Every Chunk an Access Group</h2>
+
+  <div class="callout">
+    <p><b>Updated October 2026:</b> documents can now belong to several groups, and permission changes sync to the index automatically within seconds. See <a href="#changelog">the changelog</a>.</p>
+  </div>
+
+  <div class="prose">
+    <p>Every document is assigned an access group during ingestion:</p>
+  </div>
+
+  <div class="flow-chip"><span class="term">employee-leave-policy.md</span> <span class="flow-arrow">→</span> <span class="term">HR group</span></div>
+  <div class="flow-chip" style="margin-top:4px"><span class="term">quarterly-finance-report.pdf</span> <span class="flow-arrow">→</span> <span class="term">Finance group</span></div>
+
+  <div class="prose">
+    <p style="margin-top:14px">I use the <b>Entra group ID</b> as the actual access value, not the human-readable name: <code>access = &lt;HR_GROUP_ID&gt;</code>.</p>
+    <p>That value propagates through ingestion, and has to survive the whole pipeline, because RAG doesn't retrieve documents, it retrieves chunks. Split an HR document into three chunks and all three carry <code>access = &lt;HR_GROUP_ID&gt;</code>.</p>
+  </div>
+
+  <figure class="diagram-card">
+    <div class="diagram-scroll">
+    <svg viewBox="0 0 440 180" role="img" aria-label="HR document is tagged access equals HR_GROUP_ID. Finance document is tagged access equals FINANCE_GROUP_ID.">
+      <defs>
+        <marker id="arrow-d2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--text-secondary)"/>
+        </marker>
+      </defs>
+      <line x1="120" y1="42" x2="156" y2="42" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d2)"/>
+      <line x1="160" y1="122" x2="196" y2="122" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d2)"/>
+
+      <rect x="10" y="20" width="110" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="65" y="42" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:8.3px;fill:var(--text-primary)">HR document</text>
+
+      <rect x="160" y="20" width="180" height="44" rx="10" style="fill:var(--accent-green-bg);stroke:var(--accent-green-border);stroke-width:1.5"/>
+      <text x="250" y="42" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:7.9px;fill:var(--accent-green)">access = HR_GROUP_ID</text>
+
+      <rect x="10" y="100" width="150" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="85" y="122" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:8.3px;fill:var(--text-primary)">Finance document</text>
+
+      <rect x="200" y="100" width="215" height="44" rx="10" style="fill:var(--accent-green-bg);stroke:var(--accent-green-border);stroke-width:1.5"/>
+      <text x="307" y="122" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:7.6px;fill:var(--accent-green)">access = FINANCE_GROUP_ID</text>
+    </svg>
+    </div>
+    <div class="diagram-eyebrow">Fig. 5 · Every document is tagged with its access group</div>
+  </figure>
+
+  <div class="prose">
+    <p>Azure AI Search stores that value as a <b>filterable field</b>, which gives the backend a common key between a user and a document: Alice maps to <code>HR_GROUP_ID</code>; the HR document maps to <code>HR_GROUP_ID</code>. Same key, both sides.</p>
+  </div>
+
+  <figure class="diagram-card" id="document-pipeline">
+    <div class="diagram-scroll">
+    <svg viewBox="0 0 830 140" role="img" aria-label="Document flows into Azure Blob Storage, through an Indexer and Skillset, into Chunks, which land in Azure AI Search.">
+      <defs>
+        <marker id="arrow-d5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--text-secondary)"/>
+        </marker>
+      </defs>
+      <line x1="100" y1="50" x2="136" y2="50" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d5)"/>
+      <line x1="305" y1="50" x2="341" y2="50" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d5)"/>
+      <line x1="510" y1="50" x2="546" y2="50" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d5)"/>
+      <line x1="630" y1="50" x2="666" y2="50" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d5)"/>
+
+      <rect x="10" y="28" width="90" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="55" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Document</text>
+
+      <rect x="140" y="28" width="165" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="222" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.8px;fill:var(--text-primary)">Azure Blob Storage</text>
+
+      <rect x="345" y="28" width="165" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="427" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.8px;fill:var(--text-primary)">Indexer + Skillset</text>
+
+      <rect x="550" y="28" width="80" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="590" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Chunks</text>
+      <text x="590" y="95" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:8.5px;fill:var(--accent-green)">retains access group</text>
+
+      <rect x="670" y="28" width="150" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="745" y="50" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Azure AI Search</text>
+    </svg>
+    </div>
+    <div class="diagram-eyebrow">Fig. 6 · Ingestion: document to indexed chunk</div>
+    <figcaption>Ingestion never touches a user. Its only job is to carry each document's access group forward onto every chunk it produces.</figcaption>
+    </figure>
+
+  <!-- ══════════════════════════
+       PART 6 — AUTHENTICATION
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="authentication">Part 6: Authentication — How Alice Gets Into the System</h2>
+
+  <div class="prose">
+    <p>Before the backend can decide what Alice can access, it needs to know who she is. I used <b>Microsoft Entra ID</b> for that — the app never touches Alice's password.</p>
+  </div>
+
+  <div class="flow-chip"><span class="term">Alice</span> <span class="flow-arrow">→</span> <span class="term">/login</span> <span class="flow-arrow">→</span> <span class="term">Microsoft Entra ID</span> <span class="flow-arrow">→</span> <span class="term">Alice signs in</span> <span class="flow-arrow">→</span> <span class="term">/auth/callback</span> <span class="flow-arrow">→</span> <span class="term">Access token</span> <span class="flow-arrow">→</span> <span class="term">FastAPI session</span></div>
+
+  <div class="prose">
+    <p style="margin-top:14px">The backend stores the token in the session and <b>validates it on every subsequent request</b> — signature, issuer, audience, scope, claims — rather than trusting whatever's inside it.</p>
+  </div>
+
+  <div class="flow-chip"><span class="term">Request</span> <span class="flow-arrow">→</span> <span class="term">Session</span> <span class="flow-arrow">→</span> <span class="term">Access token</span> <span class="flow-arrow">→</span> <span class="term">JWT validation</span> <span class="flow-arrow">→</span> <span class="term">Authenticated user</span></div>
+
+  <div class="prose">
+    <p style="margin-top:14px">Once validated, the token gives the backend Alice's identity and group membership directly:</p>
+  </div>
+
+  <pre class="code-block">{ "name": "Alice", "groups": ["&lt;HR_GROUP_ID&gt;"], "scope": "access_as_user" }</pre>
+
+  <div class="prose">
+    <p>That's where <b>authentication becomes authorization</b>.</p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 7 — GROUP MEMBERSHIP → SEARCH AUTHORIZATION
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="group-auth">Part 7: Turning Group Membership Into Search Authorization</h2>
+
+  <div class="prose">
+    <p>Alice resolves to a group: Alice <span class="flow-arrow">→</span> <code>HR_GROUP_ID</code>. The search index resolves the same way — HR chunks carry <code>HR_GROUP_ID</code>, Finance chunks carry <code>FINANCE_GROUP_ID</code>. Same key, both sides.</p>
+  </div>
+
+  <figure class="diagram-card" id="where-they-meet">
+    <div class="diagram-scroll">
+    <svg viewBox="0 0 600 420" role="img" aria-label="The user's group produces a search authorization filter, and the user's question drives a relevance search; both combine into authorized and relevant chunks, which are sent to Azure OpenAI.">
+      <defs>
+        <marker id="arrow-d6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--text-secondary)"/>
+        </marker>
+        <marker id="arrow-d6g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent-green)"/>
+        </marker>
+      </defs>
+
+      <line x1="180" y1="64" x2="180" y2="106" style="stroke:var(--accent-green);stroke-width:1.5" marker-end="url(#arrow-d6g)"/>
+      <line x1="450" y1="64" x2="450" y2="106" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d6)"/>
+
+      <line x1="180" y1="154" x2="313" y2="222" style="stroke:var(--accent-green);stroke-width:1.4"/>
+      <line x1="450" y1="154" x2="317" y2="222" style="stroke:var(--text-secondary);stroke-width:1.4"/>
+
+      <circle cx="315" cy="230" r="15" style="fill:var(--surface);stroke:var(--text-secondary);stroke-width:1.5"/>
+      <text x="315" y="231" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:11.9px;font-weight:600;fill:var(--text-secondary)">+</text>
+
+      <line x1="315" y1="246" x2="315" y2="268" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d6)"/>
+      <line x1="315" y1="318" x2="315" y2="348" style="stroke:var(--text-secondary);stroke-width:1.5" marker-end="url(#arrow-d6)"/>
+
+      <rect x="60" y="20" width="240" height="44" rx="10" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="180" y="42" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--accent-green)">User's group</text>
+
+      <rect x="340" y="20" width="220" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="450" y="42" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">User's question</text>
+
+      <rect x="60" y="110" width="240" height="44" rx="10" style="fill:var(--accent-green-bg);stroke:var(--accent-green-border);stroke-width:1.5"/>
+      <text x="180" y="132" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.3px;fill:var(--accent-green)">Search authorization filter</text>
+
+      <rect x="340" y="110" width="220" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="450" y="132" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Relevance search</text>
+
+      <rect x="175" y="270" width="280" height="48" rx="10" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="315" y="294" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--accent-green)">Authorized + relevant chunks</text>
+
+      <rect x="225" y="350" width="180" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="315" y="372" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:10.2px;fill:var(--text-primary)">Azure OpenAI</text>
+    </svg>
+    </div>
+    <div class="diagram-eyebrow">Fig. 7 · Where the document side and user side meet</div>
+    <figcaption>Authorization and relevance are computed independently and combined at query time — neither one alone decides what Azure OpenAI receives.</figcaption>
+    </figure>
+
+  <div class="prose">
+    <p>When Alice asks a question, the backend turns her groups into a search filter: <code>access eq '&lt;HR_GROUP_ID&gt;'</code>.</p>
+    <p>That filter does two jobs: <b>enforce authorization</b>, and act as a <b>hard constraint on relevance — not a signal</b>. If Alice asks "What is the maternity leave policy?", a Finance chunk might score high on relevance (it mentions "employees," "policy," "benefits"), but it's still excluded — she isn't authorized to see it, regardless of how relevant it is.</p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 8 — REQUEST FLOW + SECURITY BOUNDARY
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="request-flow">Part 8: The RAG Request Flow — and the Security Boundary</h2>
+
+  <div class="prose">
+    <p>This is the part of the architecture I care about most.</p>
+    <p>Alice authenticates, and her groups resolve to <code>HR_GROUP_ID</code>. When she asks an <b>HR question</b>, the backend queries Azure AI Search with that filter and gets back chunks that are both authorized and relevant — that becomes the grounded prompt sent to Azure OpenAI. When she asks a <b>Finance question</b> instead, the same filter still applies: Finance chunks fail the authorization check and are filtered out before generation — not retrieved and hidden, <b>never retrieved at all</b>.</p>
+  </div>
+
+  <figure class="diagram-card" id="request-flow-diagram">
+    <div class="diagram-scroll">
+    <svg viewBox="0 0 780 300" role="img" aria-label="Example A: Alice asks an HR question. Azure AI Search filters by access eq HR_GROUP_ID and returns the HR chunk, authorized and relevant, which is sent to Azure OpenAI and produces a grounded answer. Example B: Alice asks a Finance question. The same filter applies. The Finance chunk fails authorization, is filtered out, and never reaches the LLM.">
+      <defs>
+        <marker id="arrow-d8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--text-secondary)"/>
+        </marker>
+      </defs>
+
+      <!-- example bands -->
+      <rect x="20" y="26" width="740" height="108" rx="14" style="fill:var(--accent-green-bg);stroke:var(--accent-green-border);stroke-width:1" stroke-dasharray="3 4"/>
+      <text x="36" y="44" style="font-family:'Fira Code',monospace;font-size:9px;font-weight:600;letter-spacing:0.07em;fill:var(--accent-green)">EXAMPLE A · HR QUESTION — AUTHORIZED</text>
+
+      <rect x="20" y="156" width="740" height="108" rx="14" style="fill:var(--surface-2);stroke:var(--border);stroke-width:1" stroke-dasharray="3 4"/>
+      <text x="36" y="174" style="font-family:'Fira Code',monospace;font-size:9px;font-weight:600;letter-spacing:0.07em;fill:var(--text-secondary)">EXAMPLE B · FINANCE QUESTION — BLOCKED</text>
+
+      <!-- row A arrows -->
+      <line x1="126" y1="82" x2="144" y2="82" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d8)"/>
+      <line x1="294" y1="82" x2="312" y2="82" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d8)"/>
+      <line x1="482" y1="82" x2="500" y2="82" style="stroke:var(--accent-green);stroke-width:1.4" marker-end="url(#arrow-d8)"/>
+      <line x1="610" y1="82" x2="628" y2="82" style="stroke:var(--accent-green);stroke-width:1.4" marker-end="url(#arrow-d8)"/>
+
+      <!-- row B arrows -->
+      <line x1="126" y1="212" x2="144" y2="212" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d8)"/>
+      <line x1="294" y1="212" x2="312" y2="212" style="stroke:var(--text-secondary);stroke-width:1.4" marker-end="url(#arrow-d8)"/>
+      <line x1="482" y1="212" x2="500" y2="212" style="stroke:var(--text-secondary);stroke-width:1.4" stroke-dasharray="2 2" marker-end="url(#arrow-d8)"/>
+      <line x1="610" y1="212" x2="628" y2="212" style="stroke:var(--text-secondary);stroke-width:1.4" stroke-dasharray="2 2" marker-end="url(#arrow-d8)"/>
+
+      <!-- ROW A: HR question -->
+      <rect x="36" y="60" width="90" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="81" y="76" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9px;fill:var(--text-primary)">Alice asks:</text>
+      <text x="81" y="90" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:9px;fill:var(--text-primary)">HR question</text>
+
+      <rect x="144" y="60" width="150" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="219" y="76" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.5px;fill:var(--text-primary)">Azure AI Search</text>
+      <text x="219" y="90" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:7.5px;fill:var(--text-secondary)">filter: HR_GROUP_ID</text>
+
+      <rect x="312" y="60" width="170" height="44" rx="10" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="397" y="76" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.5px;fill:var(--accent-green)">HR chunk</text>
+      <text x="397" y="90" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:7.5px;fill:var(--accent-green)">authorized ✅ relevant ✅</text>
+
+      <rect x="500" y="60" width="110" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="555" y="82" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.5px;fill:var(--text-primary)">Azure OpenAI</text>
+
+      <rect x="628" y="60" width="100" height="44" rx="10" style="fill:var(--surface);stroke:var(--accent-green);stroke-width:1.5"/>
+      <text x="678" y="82" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9px;fill:var(--accent-green)">Grounded Answer</text>
+
+      <!-- ROW B: Finance question -->
+      <rect x="36" y="190" width="90" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="81" y="206" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9px;fill:var(--text-primary)">Alice asks:</text>
+      <text x="81" y="220" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:9px;fill:var(--text-primary)">Finance question</text>
+
+      <rect x="144" y="190" width="150" height="44" rx="10" style="fill:var(--surface);stroke:var(--border);stroke-width:1.5"/>
+      <text x="219" y="206" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.5px;fill:var(--text-primary)">Azure AI Search</text>
+      <text x="219" y="220" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:7.5px;fill:var(--text-secondary)">filter: HR_GROUP_ID</text>
+
+      <rect x="312" y="190" width="170" height="44" rx="10" style="fill:var(--surface);stroke:var(--text-secondary);stroke-width:1.5" stroke-dasharray="2 2"/>
+      <text x="397" y="206" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9.5px;fill:var(--text-secondary)">Finance chunk</text>
+      <text x="397" y="220" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:7.5px;fill:var(--text-secondary)">authorized ❌</text>
+
+      <rect x="500" y="190" width="110" height="44" rx="10" style="fill:var(--surface);stroke:var(--text-secondary);stroke-width:1.5" stroke-dasharray="2 2"/>
+      <text x="555" y="212" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:9px;fill:var(--text-secondary)">Filtered out</text>
+
+      <rect x="628" y="190" width="100" height="44" rx="10" style="fill:var(--surface);stroke:var(--text-secondary);stroke-width:1.5" stroke-dasharray="2 2"/>
+      <text x="678" y="206" text-anchor="middle" dominant-baseline="middle" style="font-family:'Fira Code',monospace;font-size:8.5px;font-weight:600;fill:var(--text-secondary)">Never reaches</text>
+      <text x="678" y="219" text-anchor="middle" style="font-family:'Fira Code',monospace;font-size:8.5px;font-weight:600;fill:var(--text-secondary)">the LLM</text>
+    </svg>
+    </div>
+    <div class="diagram-eyebrow">Fig. 8 · Same filter, two outcomes</div>
+    <figcaption>Same user, same filter, same search call shape. The only variable is whether the chunk's <code>access</code> value matches Alice's group — that alone decides which lane it takes.</figcaption>
+    </figure>
+
+  <div class="callout">
+    <p><b>The security boundary exists outside the LLM.</b> It never sees the document store — only chunks that already passed the authorization check. Unauthorized content is excluded from the retrieval pipeline, not hidden during generation.</p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 9 — GROUNDING
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="grounding">Part 9: Grounding the LLM</h2>
+
+  <div class="prose">
+    <p>Authorization solves what information can reach the LLM. <b>Grounding solves a separate problem</b>: what the LLM does when that information isn't enough.</p>
+    <p>I don't want it filling gaps from general knowledge, so the prompt constrains generation to the retrieved context — answer only from what's provided, don't invent, don't use outside knowledge, and say so when the context is insufficient.</p>
+  </div>
+
+  <div class="flow-chip"><span class="term">User question + Authorized chunks</span> <span class="flow-arrow">→</span> <span class="term">Grounded prompt</span> <span class="flow-arrow">→</span> <span class="term">LLM</span> <span class="flow-arrow">→</span> <span class="term">Answer</span></div>
+
+  <div class="prose">
+    <p style="margin-top:14px">If Alice's authorized documents can't answer her question, the system doesn't bypass the authorization boundary to help — it just says so: <i>"I don't have enough information to answer that."</i></p>
+    <p><b>Two separate protections, two separate jobs</b>: authorization keeps unauthorized information out; grounding keeps the LLM from inventing information when what's authorized isn't enough.</p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 10 — PROBLEMS I RAN INTO
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="problems">Part 10: Problems I Ran Into</h2>
+
+  <div class="bug-card">
+    <div class="bug-title">Problem · Storage account blocked all direct uploads</div>
+    <p>My storage account had <b>public network access disabled by company policy</b> — no direct upload path. I stood up an Ubuntu VM, attached it to a <b>private endpoint</b> on the storage account's VNet, and uploaded documents through that private, network-isolated channel instead of trying to route around the policy.</p>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-title">Problem · Chunks lost their access group</div>
+    <p>Chunk-level authorization doesn't come for free. When Azure AI Search splits a document into chunks and projects each one as its own searchable entry, <b>only the fields you explicitly map flow down</b> to the child documents — a document-level <code>access</code> field isn't inherited automatically. My first indexer run produced fully chunked, fully vectorized documents with no <code>access</code> value on any of them, so the authorization filter matched nothing. I fixed it by explicitly mapping <code>access</code> into the <b>index projection</b>, so every chunk generated from a document carries its parent's access group forward.</p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 11 — SECURITY TESTING
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="security-testing">Part 11: Security Testing</h2>
+
+  <div class="prose">
+    <p>Once the pipeline works, I want the authorization behavior explicit and testable:</p>
+  </div>
+
+  <div class="data-table-wrap">
+    <table class="data-table"><tbody>
+      <tr><th>User</th><th>Group</th><th>Document</th><th class="center">Expected</th></tr>
+      <tr><td>Alice</td><td>HR</td><td>HR</td><td class="center">✅</td></tr>
+      <tr><td>Alice</td><td>HR</td><td>Finance</td><td class="center">❌</td></tr>
+      <tr><td>Bob</td><td>Finance</td><td>Finance</td><td class="center">✅</td></tr>
+      <tr><td>Bob</td><td>Finance</td><td>HR</td><td class="center">❌</td></tr>
+      <tr><td>Unauthenticated</td><td>—</td><td>HR</td><td class="center">❌</td></tr>
+    </tbody></table>
+  </div>
+
+  <div class="orange-card">
+    <div class="card-eyebrow">🏆 The test that matters</div>
+    <p>The important test isn't whether Alice can answer an HR question — it's whether she <b>can't</b> retrieve Finance information. Same logic in reverse for Bob.</p>
+    <div class="flow-chip" style="margin-top:10px"><span class="term">Alice ∈ HR</span> <span class="flow-arrow">→</span> <span class="term">HR docs ✅</span> <span class="term muted">Finance docs ❌</span></div>
+    <div class="flow-chip" style="margin-top:4px"><span class="term">Bob ∈ Finance</span> <span class="flow-arrow">→</span> <span class="term">Finance docs ✅</span> <span class="term muted">HR docs ❌</span></div>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 12 — WHAT I WOULD IMPROVE NEXT
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="improve-next">Part 12: What I Would Improve Next</h2>
+
+  <div class="prose">
+    <p style="margin-top:14px">The core security architecture is in place; the rest is production hardening:</p>
+    <ul>
+      <li><b>Retrieval quality</b> — hybrid keyword + vector search, semantic ranking, and better relevance thresholds.</li>
+      <li><b>Automated evaluation</b> — Recall@K, Precision@K, and groundedness checks.</li>
+      <li><b>Infrastructure</b> — replace local client secrets with <b>managed identity</b>, and add observability around auth failures, search queries, and LLM calls.</li>
+      <li><b>Scaling group membership</b> — for users in many groups, have the LLM <b>narrow the candidate set first</b>: classify the question against a predefined list of groups, then check that prediction against Alice's actual group membership. <b>The LLM only narrows the search; it never grants access</b> — authorization still comes from the intersection with her real, verified groups, never from the prediction alone.</li>
+    </ul>
+    <p>None of it changes the authorization architecture. It's <b>quality and readiness work</b> layered on top of a boundary that's already correct.</p>
+  </div>
+
+  <div class="callout">
+    <p>This separation is what allows the system to enforce document-level authorization without making the LLM responsible for access control.</p>
+  </div>
+
+  <!-- ══════════════════════════
+       PART 13 — CHANGELOG
+  ══════════════════════════ -->
+  <h2 class="topic-heading" id="changelog">Part 13: Changelog</h2>
+
+  <div class="prose">
+    <p>Each weekend I add one feature to SecureRAG and write up what I built and learned.</p>
+  </div>
+
+  <div class="concept">
+    <div class="concept-label">October 2026</div>
+    <div class="concept-title">Automatic permission sync</div>
+    <ul>
+      <li>Documents can belong to several groups, using an access_groups list on every chunk</li>
+      <li>Permission changes now apply within seconds: uploading the updated permission file triggers Event Grid, and an Azure Function inside the VNet updates only the affected chunks</li>
+      <li>The Function signs in with a managed identity, so no keys are stored</li>
+    </ul>
+    <div class="concept-source"><a href="./permission-sync.html">Read the write-up →</a></div>
+  </div>
+
+  <div class="concept" style="margin-top:24px">
+    <div class="concept-title"><b>Repository:</b> <a href="https://github.com/trishika22/secure-rag" target="_blank" rel="noopener">github.com/trishika22/secure-rag</a></div>
+  </div>
+
+  <div class="orange-card" style="margin-top:24px">
+    <p>This brings us to the end of my write-up! 🎉 Thank you for following along. Although wiring up Entra ID, index projections, and JWT validation left me stuck more than once, it was nevertheless a great learning experience for me. 🥰</p>
+  </div>
+
+  <div class="meme-row">
+    <figure class="meme-card">
+      <img src="https://i.imgflip.com/b053mh.jpg" alt="Drake Hotline Approves meme. Top panel, Drake rejecting: LLM says trust me bro, I'd never leak the Finance docs. Bottom panel, Drake approving: Bro never even sees the Finance docs.">
+    </figure>
+    <figure class="meme-card">
+      <img src="data:image/jpeg;base64,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paF8s9ENIc3iHLLl3ga/3cjDpLwyNb31CIubx9DR8At8CUEQVhaHsSzsFj3JIH7TpJt4JZLRsUDDTghGkSWC3mT0KM5iYaWhjSDqx01ho5HgQKw14aEQPgrkoToajiRJbRBsZNiOJkSKvt/hNTwOZfeoJWkfxFdS+F9n/CK+x6RI9fQt2NB3Dy6NqFYMBXCtMmSODSGyTgNCuRcNhiJEnPg5EWsFRhUU2SaytiXJNj+MdoXQ9MgjkSopQoUGouGHLRWQi7fnMlp2x8i0XwIsbgcqhx8EOGRjTRQzTEMIU7LEmzwaEk0RCoahZRZhQe6wkF84OQskQkocFxyRYtmxQVlYfyMJLoShEk5GxBE7JrQ5hBsr4whCWvr/AP/aAAwDAQACAAMAAAAQ8888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888IQ8888U488888888888888888888888888888888888888sc888sY8c8448w80U0w84848808888888888888888888888888sYAUMoIo0c8EMs8A80M0U8888888888888888888888888s8sMMs88M8sc8MsMM8scM88888888888888888888888888888888888888888888888888888888888888wrsJxxz484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" alt="Cheems Shiba Inu giving a thumbs up, approved meme.">
+    </figure>
+  </div>
+
+</div><!-- end .content -->
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h3>Sections</h3>
+  <a href="#intro">Introduction</a>
+  <a href="#tech-stack">Tech Stack</a>
+  <a href="#core-idea">The Core Idea</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#document-permissions">Document Permissions</a>
+  <a href="#authentication">Authentication</a>
+  <a href="#group-auth">Group → Search Auth</a>
+  <a href="#request-flow">Request Flow &amp; Security Boundary</a>
+  <a href="#grounding">Grounding the LLM</a>
+  <a href="#problems">Problems I Ran Into</a>
+  <a href="#security-testing">Security Testing</a>
+  <a href="#improve-next">What's Next</a>
+  <a href="#changelog">Changelog</a>
+</div>
+
+</div><!-- end .layout -->
+</html>
