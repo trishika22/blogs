@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trishika's Engineering Write-ups</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Fira+Code:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f5f4ef; --surface:#fff; --border:#e2e1dc; --text:#1a1a18; --muted:#6b6b68; --green:#059669; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Lora',Georgia,serif; background:var(--bg); color:var(--text); line-height:1.7; }
+  main { max-width:760px; margin:0 auto; padding:48px 16px 80px; display:grid; gap:28px; }
+  .eyebrow { font-family:'Fira Code',monospace; font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--green); }
+  h1 { font-size:28px; line-height:1.25; }
+  p.lede { color:var(--muted); }
+  h2 { font-size:18px; padding-bottom:8px; border-bottom:2px solid var(--border); }
+  .card { display:block; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 20px; text-decoration:none; color:inherit; }
+  .card:hover { border-color:var(--green); }
+  .card .meta { font-family:'Fira Code',monospace; font-size:11px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
+  .card .title { font-weight:700; margin:4px 0; }
+  .card .sum { font-size:14px; color:var(--muted); }
+  .list { display:grid; gap:12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Engineering write-ups</div>
+    <h1>What I'm building, one feature at a time</h1>
+    <p class="lede">Each weekend I add one feature to a project and write up what I built, how it works and what I learned.</p>
+  </header>
+
+  <section class="list">
+    <h2>SecureRAG</h2>
+    <a class="card" href="secure-rag/">
+      <div class="meta">Case study</div>
+      <div class="title">Enforcing Document-Level Access Control in a RAG Pipeline</div>
+      <div class="sum">Authorization at retrieval with Microsoft Entra ID and Azure AI Search, so the LLM never sees documents a user isn't allowed to read.</div>
+    </a>
+    <a class="card" href="secure-rag/permission-sync.html">
+      <div class="meta">October 2026</div>
+      <div class="title">Keeping Permissions Fresh: Automatic Permission Sync</div>
+      <div class="sum">Permission changes now apply within seconds, using Event Grid and an Azure Function inside the VNet with a managed identity.</div>
+    </a>
+  </section>
+</main>
+</body>
+</html>
